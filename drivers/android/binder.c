@@ -3295,7 +3295,6 @@ static void binder_transaction(struct binder_proc *proc,
 
 	if (target_node && target_node->txn_security_ctx) {
 		u32 secid;
-		size_t added_size;
 		int max_retries = 100;
 
 		security_cred_getsecid(binder_get_cred(proc), &secid);
@@ -3318,13 +3317,24 @@ static void binder_transaction(struct binder_proc *proc,
 				goto retry_alloc;
 			}
 		}
-		if (ret) {
+		if (ret == -EINVAL || ret == -EOPNOTSUPP) {
+			/*
+			 * No LSM has a context for this secid (selinux=0 with
+			 * AppArmor). Send the transaction without one; the
+			 * receiver sees no SID and falls back to getpidcon().
+			 */
+			secctx = NULL;
+			secctx_sz = 0;
+		} else if (ret) {
 			return_error = BR_FAILED_REPLY;
 			return_error_param = ret;
 			return_error_line = __LINE__;
 			goto err_get_secctx_failed;
 		}
-		added_size = ALIGN(secctx_sz, sizeof(u64));
+	}
+	if (secctx) {
+		size_t added_size = ALIGN(secctx_sz, sizeof(u64));
+
 		extra_buffers_size += added_size;
 		if (extra_buffers_size < added_size) {
 			/* integer overflow of extra_buffers_size */
