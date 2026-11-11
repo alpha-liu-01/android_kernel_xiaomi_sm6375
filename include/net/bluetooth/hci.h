@@ -710,6 +710,60 @@ struct hci_cp_accept_sync_conn_req {
 	__le16   pkt_type;
 } __packed;
 
+/* Coding formats (Core 5.x Assigned Numbers) */
+#define HCI_CODING_FORMAT_CVSD		0x02
+#define HCI_CODING_FORMAT_TRANSPARENT	0x03
+#define HCI_CODING_FORMAT_LINEAR_PCM	0x04
+#define HCI_CODING_FORMAT_MSBC		0x05
+#define HCI_PCM_DATA_FORMAT_2_COMP	0x02
+#define HCI_SCO_DATA_PATH_HCI		0x00
+#define HCI_SCO_DATA_PATH_PCM		0x01
+
+struct hci_coding_format {
+	__u8	id;
+	__le16	cid;
+	__le16	vid;
+} __packed;
+
+/* The parameter block shared by Enhanced Setup and Enhanced Accept */
+struct hci_enhanced_sync_conn_params {
+	__le32	tx_bandwidth;
+	__le32	rx_bandwidth;
+	struct	hci_coding_format tx_coding_format;
+	struct	hci_coding_format rx_coding_format;
+	__le16	tx_codec_frame_size;
+	__le16	rx_codec_frame_size;
+	__le32	in_bandwidth;
+	__le32	out_bandwidth;
+	struct	hci_coding_format in_coding_format;
+	struct	hci_coding_format out_coding_format;
+	__le16	in_coded_data_size;
+	__le16	out_coded_data_size;
+	__u8	in_pcm_data_format;
+	__u8	out_pcm_data_format;
+	__u8	in_pcm_sample_payload_msb_pos;
+	__u8	out_pcm_sample_payload_msb_pos;
+	__u8	in_data_path;
+	__u8	out_data_path;
+	__u8	in_transport_unit_size;
+	__u8	out_transport_unit_size;
+	__le16	max_latency;
+	__le16	pkt_type;
+	__u8	retrans_effort;
+} __packed;
+
+#define HCI_OP_ENHANCED_SETUP_SYNC_CONN		0x043d
+struct hci_cp_enhanced_setup_sync_conn {
+	__le16	handle;
+	struct	hci_enhanced_sync_conn_params p;
+} __packed;
+
+#define HCI_OP_ENHANCED_ACCEPT_SYNC_CONN_REQ	0x043e
+struct hci_cp_enhanced_accept_sync_conn_req {
+	bdaddr_t bdaddr;
+	struct	hci_enhanced_sync_conn_params p;
+} __packed;
+
 #define HCI_OP_REJECT_SYNC_CONN_REQ	0x042a
 struct hci_cp_reject_sync_conn_req {
 	bdaddr_t bdaddr;

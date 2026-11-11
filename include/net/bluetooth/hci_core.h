@@ -694,6 +694,8 @@ enum {
 	HCI_CONN_NEW_LINK_KEY,
 	HCI_CONN_SCANNING,
 	HCI_CONN_AUTH_FAILURE,
+	HCI_CONN_OFFLOAD_MSBC,		/* set up with controller mSBC codec */
+	HCI_CONN_OFFLOAD_MSBC_ACTIVE,	/* ... and connected (counted) */
 };
 
 static inline bool hci_conn_ssp_enabled(struct hci_conn *conn)
@@ -909,6 +911,12 @@ static inline struct hci_conn *hci_lookup_le_connect(struct hci_dev *hdev)
 
 int hci_disconnect(struct hci_conn *conn, __u8 reason);
 bool hci_setup_sync(struct hci_conn *conn, __u16 handle);
+bool hci_sco_offload_transp(struct hci_dev *hdev);
+void hci_offload_msbc_link_up(struct hci_conn *conn);
+void hci_offload_msbc_link_down(struct hci_conn *conn);
+void hci_fill_offload_msbc_params(struct hci_enhanced_sync_conn_params *p,
+				  u16 pkt_type, u16 max_latency,
+				  u8 retrans_effort);
 void hci_sco_setup(struct hci_conn *conn, __u8 status);
 
 struct hci_conn *hci_conn_add(struct hci_dev *hdev, int type, bdaddr_t *dst,

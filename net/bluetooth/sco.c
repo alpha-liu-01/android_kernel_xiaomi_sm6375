@@ -757,6 +757,18 @@ static void sco_conn_defer_accept(struct hci_conn *conn, u16 setting)
 		cp.role = 0x00; /* Ignored */
 
 		hci_send_cmd(hdev, HCI_OP_ACCEPT_CONN_REQ, sizeof(cp), &cp);
+	} else if ((setting & SCO_AIRMODE_MASK) == SCO_AIRMODE_TRANSP &&
+		   hci_sco_offload_transp(hdev)) {
+		struct hci_cp_enhanced_accept_sync_conn_req cp;
+
+		bacpy(&cp.bdaddr, &conn->dst);
+		hci_fill_offload_msbc_params(&cp.p, conn->pkt_type,
+					     (conn->pkt_type & ESCO_2EV3) ?
+					     0x0008 : 0x000D, 0x02);
+		set_bit(HCI_CONN_OFFLOAD_MSBC, &conn->flags);
+		bt_dev_info(hdev, "mSBC: enhanced accept, controller codec, PCM path");
+		hci_send_cmd(hdev, HCI_OP_ENHANCED_ACCEPT_SYNC_CONN_REQ,
+			     sizeof(cp), &cp);
 	} else {
 		struct hci_cp_accept_sync_conn_req cp;
 

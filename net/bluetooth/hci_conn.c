@@ -59,6 +59,82 @@ static const struct sco_param esco_param_msbc[] = {
 	{ EDR_ESCO_MASK | ESCO_EV3,   0x0008,	0x02 }, /* T1 */
 };
 
+/* Transparent (mSBC) SCO links on controllers whose SCO data path is PCM
+ * (audio offload, e.g. Qualcomm chips behind an Android BT HAL with the
+ * SCO audio on SLIMbus/PCM): with the legacy Setup Synchronous Connection
+ * the controller passes the PCM samples through as if they were mSBC
+ * frames. Use Enhanced Setup/Accept instead and let the controller encode
+ * mSBC from 16 kHz linear PCM on its PCM data path, as Android does
+ * (esco_parameters.cc, mSBC T2/T1 with offload). There is no HCI data path
+ * for transparent SCO on such devices anyway.
+ */
+static bool sco_offload_msbc = true;
+module_param(sco_offload_msbc, bool, 0644);
+MODULE_PARM_DESC(sco_offload_msbc,
+		 "Set up transparent (mSBC) SCO links with controller mSBC encoding on the PCM data path");
+
+/* Connected offloaded mSBC links, for userspace that has to configure the
+ * PCM side (e.g. the SLIMbus sample rate: 16 kHz for mSBC, 8 kHz for CVSD).
+ * Changed under hdev->lock.
+ */
+static int sco_offload_msbc_active;
+module_param(sco_offload_msbc_active, int, 0444);
+MODULE_PARM_DESC(sco_offload_msbc_active,
+		 "Number of connected SCO links with controller mSBC encoding");
+
+void hci_offload_msbc_link_up(struct hci_conn *conn)
+{
+	if (test_bit(HCI_CONN_OFFLOAD_MSBC, &conn->flags) &&
+	    !test_and_set_bit(HCI_CONN_OFFLOAD_MSBC_ACTIVE, &conn->flags)) {
+		sco_offload_msbc_active++;
+		bt_dev_info(conn->hdev, "mSBC: offloaded link up (%d active)",
+			    sco_offload_msbc_active);
+	}
+}
+
+void hci_offload_msbc_link_down(struct hci_conn *conn)
+{
+	if (test_and_clear_bit(HCI_CONN_OFFLOAD_MSBC_ACTIVE, &conn->flags) &&
+	    sco_offload_msbc_active > 0)
+		sco_offload_msbc_active--;
+}
+
+bool hci_sco_offload_transp(struct hci_dev *hdev)
+{
+	/* Enhanced Setup Synchronous Connection: octet 29, bit 3 */
+	return sco_offload_msbc && (hdev->commands[29] & 0x08);
+}
+
+void hci_fill_offload_msbc_params(struct hci_enhanced_sync_conn_params *p,
+				  u16 pkt_type, u16 max_latency,
+				  u8 retrans_effort)
+{
+	/* Sizes from the Core specification (Vol 4, Part E, 7.1.45/46) */
+	BUILD_BUG_ON(sizeof(struct hci_cp_enhanced_setup_sync_conn) != 59);
+	BUILD_BUG_ON(sizeof(struct hci_cp_enhanced_accept_sync_conn_req) != 63);
+
+	memset(p, 0, sizeof(*p));
+	p->tx_bandwidth = cpu_to_le32(0x00001f40);	/* 64 kbit/s on air */
+	p->rx_bandwidth = cpu_to_le32(0x00001f40);
+	p->tx_coding_format.id = HCI_CODING_FORMAT_MSBC;
+	p->rx_coding_format.id = HCI_CODING_FORMAT_MSBC;
+	p->tx_codec_frame_size = cpu_to_le16(60);
+	p->rx_codec_frame_size = cpu_to_le16(60);
+	p->in_bandwidth = cpu_to_le32(0x00007d00);	/* 16 kHz, 16 bit */
+	p->out_bandwidth = cpu_to_le32(0x00007d00);
+	p->in_coding_format.id = HCI_CODING_FORMAT_LINEAR_PCM;
+	p->out_coding_format.id = HCI_CODING_FORMAT_LINEAR_PCM;
+	p->in_coded_data_size = cpu_to_le16(16);
+	p->out_coded_data_size = cpu_to_le16(16);
+	p->in_pcm_data_format = HCI_PCM_DATA_FORMAT_2_COMP;
+	p->out_pcm_data_format = HCI_PCM_DATA_FORMAT_2_COMP;
+	p->in_data_path = HCI_SCO_DATA_PATH_PCM;
+	p->out_data_path = HCI_SCO_DATA_PATH_PCM;
+	p->max_latency = cpu_to_le16(max_latency);
+	p->pkt_type = cpu_to_le16(pkt_type);
+	p->retrans_effort = retrans_effort;
+}
+
 /* This function requires the caller holds hdev->lock */
 static void hci_connect_le_scan_cleanup(struct hci_conn *conn)
 {
@@ -304,6 +380,21 @@ bool hci_setup_sync(struct hci_conn *conn, __u16 handle)
 		break;
 	default:
 		return false;
+	}
+
+	if ((conn->setting & SCO_AIRMODE_MASK) == SCO_AIRMODE_TRANSP &&
+	    hci_sco_offload_transp(hdev)) {
+		struct hci_cp_enhanced_setup_sync_conn ecp;
+
+		ecp.handle = cpu_to_le16(handle);
+		hci_fill_offload_msbc_params(&ecp.p, param->pkt_type,
+					     param->max_latency,
+					     param->retrans_effort);
+		set_bit(HCI_CONN_OFFLOAD_MSBC, &conn->flags);
+		bt_dev_info(hdev, "mSBC: enhanced setup, controller codec, PCM path (attempt %d)",
+			    conn->attempt);
+		return hci_send_cmd(hdev, HCI_OP_ENHANCED_SETUP_SYNC_CONN,
+				    sizeof(ecp), &ecp) >= 0;
 	}
 
 	cp.retrans_effort = param->retrans_effort;
@@ -576,6 +667,8 @@ int hci_conn_del(struct hci_conn *conn)
 	cancel_delayed_work_sync(&conn->disc_work);
 	cancel_delayed_work_sync(&conn->auto_accept_work);
 	cancel_delayed_work_sync(&conn->idle_work);
+
+	hci_offload_msbc_link_down(conn);
 
 	if (conn->type == ACL_LINK) {
 		struct hci_conn *sco = conn->link;
