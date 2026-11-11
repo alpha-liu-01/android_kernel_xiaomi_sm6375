@@ -221,6 +221,9 @@ config USB_F_TCM
 config USB_F_DIAG
 	tristate
 
+config USB_F_MTP
+	tristate
+
 config USB_F_ACC
 	tristate
 
@@ -413,6 +416,15 @@ config USB_CONFIGFS_F_FS
 	  of composite gadgets such that some of the functions are
 	  implemented in kernel space (for instance Ethernet, serial or
 	  mass storage) and other are implemented in user space.
+
+config USB_CONFIGFS_F_MTP
+	bool "MTP gadget"
+	select USB_F_MTP
+	depends on USB_CONFIGFS
+	help
+	  The Media Transfer Protocol (MTP) function (Android's f_mtp, the
+	  "mtp" configfs function with /dev/mtp_usb). Ubuntu Touch's
+	  mtp-server and usb-moded (function_mtp = mtp.mtp) use it.
 
 config USB_CONFIGFS_F_ACC
 	bool "Accessory gadget"
