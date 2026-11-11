@@ -2753,6 +2753,12 @@ static snd_pcm_sframes_t rewind_appl_ptr(struct snd_pcm_substream *substream,
 	snd_pcm_sframes_t appl_ptr;
 	int ret;
 
+	/* stone-ut, backport of 5.17 "ALSA: pcm: introduce INFO_NO_REWINDS
+	 * flag": hardware that already fetched the data (a DSP reading ahead
+	 * of hw_ptr) would play stale data in the rewound part.
+	 */
+	if (runtime->info & SNDRV_PCM_INFO_NO_REWINDS)
+		return 0;
 	if (avail <= 0)
 		return 0;
 	if (frames > (snd_pcm_uframes_t)avail)

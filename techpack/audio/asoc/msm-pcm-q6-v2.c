@@ -97,10 +97,19 @@ static struct snd_pcm_hardware msm_pcm_hardware_capture = {
 };
 
 static struct snd_pcm_hardware msm_pcm_hardware_playback = {
+	/*
+	 * stone-ut: NO_REWINDS. The ADSP reads the buffer ahead of the
+	 * reported hw_ptr, so a rewound and rewritten region partly never
+	 * plays (the old data does). PulseAudio 16 rewinds on stream start /
+	 * end of underrun even with max_rewind 0, which cut the first ~10 ms
+	 * off short sounds (keyboard clicks) on the speaker. "Rewound 0
+	 * frames" makes it queue new data behind what is already buffered.
+	 */
 	.info =                 (SNDRV_PCM_INFO_MMAP |
 				SNDRV_PCM_INFO_BLOCK_TRANSFER |
 				SNDRV_PCM_INFO_MMAP_VALID |
 				SNDRV_PCM_INFO_INTERLEAVED |
+				SNDRV_PCM_INFO_NO_REWINDS |
 				SNDRV_PCM_INFO_PAUSE | SNDRV_PCM_INFO_RESUME),
 	.formats =              (SNDRV_PCM_FMTBIT_S16_LE |
 				SNDRV_PCM_FMTBIT_S24_LE |
