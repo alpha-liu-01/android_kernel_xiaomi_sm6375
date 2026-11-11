@@ -3675,7 +3675,13 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 	drm_panel_init(&panel->drm_panel);
 	panel->drm_panel.dev = &panel->mipi_device.dev;
 	panel->mipi_device.dev.of_node = of_node;
-	panel->dsi_refresh_flag = 60;
+	/*
+	 * Unknown until a refresh-rate command (DISP_BC_*HZ) has been sent.
+	 * With continuous splash the bootloader leaves the panel in its 120 Hz
+	 * setting and dsi_panel_enable() is skipped; starting at 60 meant a
+	 * first frame at 60 Hz never sent DISP_BC_60HZ, and the panel flickered.
+	 */
+	panel->dsi_refresh_flag = 0;
 
 	rc = drm_panel_add(&panel->drm_panel);
 	if (rc)
